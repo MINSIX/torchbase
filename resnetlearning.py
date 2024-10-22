@@ -4,8 +4,6 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 # Residual Block 정의
 class ResidualBlock(nn.Module):
     def __init__(self, in_channels,out_channels,stride=1):
@@ -64,37 +62,35 @@ class Model(nn.Module):
 def Model18():
     return Model(ResidualBlock, [2, 2, 2, 2])
 #학습함수
-
-# Modify train function to use device
-def train(model, train_loader, optimizer, criterion, epochs, device):
+def train(model, train_loader, optimizer, criterion, epochs):
     model.train()
     for epoch in range(epochs):
-        total_loss = 0
+        total_loss=0
         for data, target in train_loader:
-            data, target = data.to(device), target.to(device)  # Move data and target to GPU
             optimizer.zero_grad()
-            output = model(data)
-            loss = criterion(output, target)
+            output=model(data)
+            loss=criterion(output,target)
             loss.backward()
             optimizer.step()
-            total_loss += loss.item()
+            total_loss+=loss.item()
+
         print(f'Epoch [{epoch+1}/{epochs}], Loss: {total_loss/len(train_loader):.4f}')
 
-# Modify eval function to use device
-def eval(model, test_loader, device):
+#평가함수
+def eval(model,test_loader):
     model.eval()
-    correct = 0
-    total = 0
+    correct=0
+    total=0
     with torch.no_grad():
-        for data, target in test_loader:
-            data, target = data.to(device), target.to(device)  # Move data and target to GPU
-            output = model(data)
-            _, predicted = torch.max(output, 1)
-            correct += (predicted == target).sum().item()
-            total += target.size(0)
-    accuracy = 100 * correct / total
+        for data,target in test_loader:
+            output= model(data)
+            _,predicted = torch.max(output,1)
+            correct+=(predicted==target).sum().item()
+            total+=target.size(0)
+    accuracy=100*correct/total
     print(f'Test Accuracy: {accuracy:.2f}%')
     return accuracy
+
 #하이퍼파라미터
 batch_size = 32
 learning_rate=0.01
@@ -109,13 +105,9 @@ train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=
 test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=False)
 
 #모델, 손실함수, 최적화 정의    
-
-
-# Move model to the selected device (GPU or CPU)
-model = Model18().to(device)
-
+model= Model18()
 crit = nn.CrossEntropyLoss()
 opt = optim.SGD(model.parameters(), lr=learning_rate)
 
-train(model,train_loader,opt,crit,epochs,device)
-eval(model,test_loader,device)
+train(model,train_loader,opt,crit,epochs)
+eval(model,test_loader)
