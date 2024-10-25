@@ -4,55 +4,30 @@ import torch.optim as optim
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
 
-# VGGNet 모델 정의 (VGG-16 기반, MNIST에 맞게 축소)
-class VGGNet(nn.Module):
+# 간소화된 VGGNet 모델 정의 (레이어 축소)
+class SimplifiedVGGNet(nn.Module):
     def __init__(self, num_classes=10):
-        super(VGGNet, self).__init__()
+        super(SimplifiedVGGNet, self).__init__()
         self.features = nn.Sequential(
             nn.Conv2d(1, 64, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(64, 64, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=2, stride=2),
 
             nn.Conv2d(64, 128, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
-            nn.Conv2d(128, 128, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=2, stride=2),
 
             nn.Conv2d(128, 256, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
-            nn.Conv2d(256, 256, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(256, 256, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-
-            nn.Conv2d(256, 512, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(512, 512, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(512, 512, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-
-            nn.Conv2d(512, 512, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(512, 512, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(512, 512, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=2, stride=2)
         )
+        
+        # 완전 연결 레이어 (Flatten 이후)
         self.classifier = nn.Sequential(
-            nn.Linear(512 * 7 * 7, 4096),
+            nn.Linear(256 * 3 * 3, 1024),  # MNIST 이미지 28x28을 3x3으로 줄인 크기
             nn.ReLU(inplace=True),
-            nn.Dropout(),
-            nn.Linear(4096, 4096),
-            nn.ReLU(inplace=True),
-            nn.Dropout(),
-            nn.Linear(4096, num_classes)
+            nn.Dropout(0.5),
+            nn.Linear(1024, num_classes)
         )
 
     def forward(self, x):
@@ -62,11 +37,12 @@ class VGGNet(nn.Module):
         return x
 
 # 학습 함수
-def train(model, train_loader, optimizer, criterion, epochs):
+def train(model, train_loader, optimizer, criterion, epochs, device):
     model.train()
     for epoch in range(epochs):
         total_loss = 0
         for data, target in train_loader:
+            data, target = data.to(device), target.to(device)
             optimizer.zero_grad()
             output = model(data)
             loss = criterion(output, target)
@@ -77,12 +53,13 @@ def train(model, train_loader, optimizer, criterion, epochs):
         print(f'Epoch [{epoch+1}/{epochs}], Loss: {total_loss/len(train_loader):.4f}')
 
 # 평가 함수
-def eval(model, test_loader):
+def eval(model, test_loader, device):
     model.eval()
     correct = 0
     total = 0
     with torch.no_grad():
         for data, target in test_loader:
+            data, target = data.to(device), target.to(device)
             output = model(data)
             _, predicted = torch.max(output, 1)
             correct += (predicted == target).sum().item()
@@ -93,14 +70,18 @@ def eval(model, test_loader):
 
 # 하이퍼파라미터
 batch_size = 32
-learning_rate = 0.01
+learning_rate = 0.001
 epochs = 10
+
+# GPU 사용 가능 여부 체크
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f'Using device: {device}')
 
 # MNIST 데이터셋 로드
 transform = transforms.Compose([
-    transforms.Resize(224),  # VGGNet은 원래 224x224 입력을 사용
+    transforms.Resize(28),  # MNIST는 원래 28x28 사이즈를 유지
     transforms.ToTensor(),
-    transforms.Normalize((0.1307,), (0.3081,))
+    transforms.Normalize((0.1307,), (0.3081,))  # Normalize 적용
 ])
 train_dataset = datasets.MNIST(root='./data', train=True, transform=transform, download=True)
 test_dataset = datasets.MNIST(root='./data', train=False, transform=transform)
@@ -109,10 +90,10 @@ train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=
 test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=False)
 
 # 모델, 손실 함수, 최적화 정의
-model = VGGNet()  # GPU를 사용하지 않으므로 .to(device) 삭제
+model = SimplifiedVGGNet().to(device)
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.SGD(model.parameters(), lr=learning_rate)
+optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
 # 학습 및 평가
-train(model, train_loader, optimizer, criterion, epochs)
-eval(model, test_loader)
+train(model, train_loader, optimizer, criterion, epochs, device)
+eval(model, test_loader, device)
